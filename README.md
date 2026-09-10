@@ -47,11 +47,12 @@ and never in the way.
   click it for the list.
 - **Subdivisions:** none, eighths, triplets and sixteenths, quieter than the
   beat so the beat stays the beat.
-- **Four sounds:** a short sine click, a woodblock, a hi-hat, and a kitten
-  that meows on the beat, meows longer and lower on the downbeat, and mews on
-  the clicks between. All four are synthesised, rendered once when the stream
-  opens, so there is no sample to license. Volume follows a logarithmic curve,
-  so every step of it is audible.
+- **Four sounds:** a short sine click, a woodblock, a hi-hat, and a meow. The
+  first three are synthesised; the meow is two real kittens, a three week old
+  one on the beat and an eight week old one on the downbeat, both public domain
+  recordings ([credits](src-tauri/sounds/README.md)). Everything is prepared
+  once when the stream opens. Volume follows a logarithmic curve, so every step
+  of it is audible.
 - **Sample accurate.** Clicks are counted in samples on the audio thread, never
   timed by the interface. A thousand beats in, a click is still on the sample
   it would be on if every interval had been exact. A new tempo takes the next
