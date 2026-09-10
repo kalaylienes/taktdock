@@ -1,0 +1,62 @@
+{
+  "name": "taktdock",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Metronome that floats above the Windows taskbar or pins into it. Pick a tempo and a meter, press play, and keep playing without switching windows.",
+  "license": "GPL-3.0-or-later",
+  "author": "kalaylienes",
+  "homepage": "https://github.com/kalaylienes/taktdock",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kalaylienes/taktdock.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kalaylienes/taktdock/issues"
+  },
+  "keywords": [
+    "metronome",
+    "click-track",
+    "tempo",
+    "guitar",
+    "practice",
+    "windows",
+    "taskbar-widget",
+    "floating-widget",
+    "desktop-widget",
+    "wasapi",
+    "tauri",
+    "rust"
+  ],
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "app:dev": "tauri dev",
+    "app:build": "tauri build",
+    "test": "playwright test --project=suite",
+    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml --lib",
+    "docs:shots": "playwright test --project=docs"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.11.1",
+    "clsx": "^2.1.1",
+    "framer-motion": "^13.1.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "tailwind-merge": "^3.4.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@tailwindcss/vite": "^4.3.3",
+    "@tauri-apps/cli": "^2.11.4",
+    "@types/node": "^26.3.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.0.5",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3",
+    "vite": "^8.2.1"
+  }
+}

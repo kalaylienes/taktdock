@@ -1,0 +1,433 @@
+@import "tailwindcss";
+
+/* Colour tokens. Components never carry a literal colour; everything reads
+   from here so the two themes stay in step. The root element carries
+   data-theme, resolved on the Rust side from the Windows app theme. */
+
+:root,
+html[data-theme="dark"] {
+  /* The accent, in the four value shape every palette here has: the dark end,
+     the main tone, the bright core in the middle of a fill, and the glow. */
+  --takt-from: #2f9e8f;
+  --takt-to: #3fbfae;
+  --takt-core: #a6ece1;
+  --takt-glow: #3fbfae40;
+  /* Text on an accent tinted pill. The main tone is too light to read on the
+     light theme's tint, so each theme names its own. */
+  --takt-ink: #5fd3c3;
+
+  --surface: #1b1b1beb;
+  --track: #ffffff14;
+  --border: #ffffff1a;
+  --text-primary: #faf9f5;
+  --text-secondary: #faf9f599;
+  --warn: #f5b84e;
+  --danger: #ef5350;
+
+  --track-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35), inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+}
+
+html[data-theme="light"] {
+  --takt-from: #1f8577;
+  --takt-to: #2f9e8f;
+  --takt-core: #8fdccf;
+  --takt-glow: #2f9e8f26;
+  --takt-ink: #145f55;
+
+  --surface: #f7f7f5eb;
+  --track: #00000012;
+  --border: #00000014;
+  --text-primary: #141413;
+  --text-secondary: #14141380;
+  --warn: #b07d22;
+  --danger: #c62828;
+
+  --track-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.09), inset 0 -1px 0 rgba(255, 255, 255, 0.7);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+body {
+  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  cursor: default;
+}
+
+* {
+  -webkit-user-drag: none;
+}
+
+.td-shell {
+  height: 100vh;
+  width: 100vw;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-sizing: border-box;
+  display: flex;
+  overflow: hidden;
+  backdrop-filter: blur(14px);
+}
+
+/* The row area gets an opaque, isolated backdrop of its own, so nothing drawn
+   inside it can blend with the transparent window behind. */
+.td-rows {
+  isolation: isolate;
+  background: var(--surface);
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 8px 8px 2px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* The wrapper whose natural height the window is sized to. `.td-rows` fills
+   the window, so it can never answer "how tall does this need to be". */
+.td-content {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+}
+
+.td-grip {
+  width: 6px;
+  flex: 0 0 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 140ms ease;
+  cursor: grab;
+}
+.td-shell:hover .td-grip {
+  opacity: 0.55;
+}
+.td-grip:active {
+  cursor: grabbing;
+}
+.td-grip-dots {
+  width: 2px;
+  height: 22px;
+  border-radius: 1px;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--text-secondary) 0 2px,
+    transparent 2px 4px
+  );
+}
+
+.td-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Row anatomy, the same slots in every row so the columns line up: a ten
+   pixel mark, a label, a flexible bar, a value, and a trailing label. */
+
+.td-group + .td-group {
+  margin-top: 6px;
+}
+
+.td-row {
+  height: 15px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-secondary);
+}
+.td-row + .td-row {
+  margin-top: 2px;
+}
+
+.td-mark {
+  flex: 0 0 10px;
+  width: 10px;
+  height: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.td-label {
+  flex: 0 0 25px;
+  width: 25px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  display: flex;
+  align-items: center;
+}
+
+.td-slot {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 15px;
+  display: flex;
+  align-items: center;
+}
+
+.td-value {
+  flex: 0 0 48px;
+  width: 48px;
+  text-align: right;
+  color: var(--text-primary);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.td-bpm {
+  font-size: 16px;
+  line-height: 15px;
+  letter-spacing: -0.01em;
+}
+
+.td-tail {
+  flex: 0 0 38px;
+  width: 38px;
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.td-warn {
+  color: var(--warn);
+}
+
+/* Play and stop, in the mark slot. */
+
+.td-play {
+  width: 10px;
+  height: 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+  transition: opacity 140ms ease;
+  cursor: default;
+}
+.td-play:hover,
+.td-play[data-running="true"] {
+  opacity: 1;
+}
+.td-play svg {
+  display: block;
+  fill: var(--takt-to);
+  overflow: visible;
+}
+
+/* Pills: the meter and the grid. Fifteen high like a row, click to step to
+   the next value, right click for the list. */
+
+.td-pill {
+  height: 15px;
+  box-sizing: border-box;
+  padding: 0 4px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--takt-ink);
+  background: color-mix(in srgb, var(--takt-to) 18%, transparent);
+  opacity: 0.9;
+  transition: opacity 140ms ease;
+}
+.td-pill:hover {
+  opacity: 1;
+}
+.td-label .td-pill {
+  width: 100%;
+}
+
+.td-link {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  font-weight: 400;
+}
+
+/* Bars: a track with an inner shadow, and a fill drawn by two opposing
+   translations so its rounded cap never stretches. */
+
+.td-track-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 6px;
+}
+
+.td-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: 3px;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+.td-track {
+  position: absolute;
+  inset: 0;
+  border-radius: 3px;
+  background: var(--track);
+  box-shadow: var(--track-shadow);
+  overflow: hidden;
+}
+
+.td-clip {
+  position: absolute;
+  inset: 0;
+  border-radius: 3px;
+  overflow: hidden;
+  will-change: transform;
+}
+
+.td-fill {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+}
+
+.td-slider {
+  cursor: default;
+  touch-action: none;
+}
+/* A taller hit area than the six pixel bar, so the slider can be grabbed
+   without aiming. */
+.td-slider::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -5px;
+  bottom: -5px;
+}
+
+/* Beat dots. */
+
+.td-dots {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 15px;
+  min-width: 0;
+}
+
+.td-dot {
+  flex: 0 0 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--track);
+  box-shadow: var(--track-shadow);
+  position: relative;
+}
+
+.td-dot-lit {
+  position: absolute;
+  inset: 0;
+  border-radius: 3px;
+  background: var(--takt-to);
+  box-shadow:
+    inset 0 0.45px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -0.6px 1px rgba(0, 0, 0, 0.28),
+    0 0 3px 0 var(--takt-glow);
+  will-change: opacity;
+}
+.td-dot-lit[data-kind="accent"] {
+  background: var(--takt-core);
+}
+
+.td-device {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Taskbar placement. The strip is around 48px tall, so the same controls sit
+   in two tighter rows with no trailing labels. */
+
+.td-shell[data-placement="taskbar"] {
+  border-radius: 6px;
+}
+
+.td-shell[data-placement="taskbar"] .td-rows {
+  padding: 3px 6px;
+}
+
+.td-shell[data-placement="taskbar"] .td-row {
+  gap: 4px;
+}
+
+.td-shell[data-placement="taskbar"] .td-label {
+  flex: 0 0 24px;
+  width: 24px;
+}
+
+.td-shell[data-placement="taskbar"] .td-value {
+  flex: 0 0 30px;
+  width: 30px;
+}
+
+.td-shell[data-placement="taskbar"] .td-bpm {
+  font-size: 11px;
+}
+
+.td-shell[data-placement="taskbar"] .td-unit {
+  font-size: 9px;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+/* A small taskbar leaves a window only just taller than the two rows, so the
+   padding and the gap between them go. */
+@media (max-height: 39px) {
+  .td-shell[data-placement="taskbar"] .td-rows {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  .td-shell[data-placement="taskbar"] .td-row + .td-row {
+    margin-top: 0;
+  }
+}
+
+/* Compact pinned strip: smaller dots on a tighter pitch. */
+.td-compact .td-dots {
+  gap: 3px;
+}
+.td-compact .td-dot,
+.td-compact .td-dot-lit {
+  flex-basis: 5px;
+  width: 5px;
+  height: 5px;
+  border-radius: 2.5px;
+}
+/* The tempo stands on its own at the right edge. */
+.td-shell.td-compact .td-value {
+  flex: 1 1 auto;
+  width: auto;
+}

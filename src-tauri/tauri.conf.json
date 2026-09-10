@@ -1,0 +1,82 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/schema.json",
+  "productName": "TaktDock",
+  "version": "1.0.0",
+  "identifier": "com.kalaylienes.taktdock",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "widget",
+        "title": "TaktDock",
+        "width": 300,
+        "height": 50,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "focus": false,
+        "maximizable": false,
+        "minimizable": false,
+        "closable": false,
+        "dragDropEnabled": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/kalaylienes/taktdock/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlFOEYzODNFNTkzRDk3NzEKUldSeGx6MVpQamlQbm5vYm1VeXdCd3JoSDR2NmhmNkxFOUlMTUN4WW85ZTRwYUoxSnBJMURIUnIK",
+      "windows": { "installMode": "passive" }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "createUpdaterArtifacts": true,
+    "targets": ["nsis"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
+    "publisher": "TaktDock",
+    "copyright": "Copyright (C) 2026 TaktDock contributors",
+    "license": "GPL-3.0-or-later",
+    "homepage": "https://github.com/kalaylienes/taktdock",
+    "shortDescription": "Metronome that lives on the taskbar",
+    "longDescription": "A metronome that floats above the taskbar or pins into it. Pick a tempo and a meter, press play, and keep playing without switching windows.",
+    "linux": {
+      "deb": {
+        "depends": [
+          "libwebkit2gtk-4.1-0",
+          "libgtk-3-0",
+          "libayatana-appindicator3-1",
+          "libasound2"
+        ]
+      }
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico"
+      },
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      }
+    }
+  }
+}

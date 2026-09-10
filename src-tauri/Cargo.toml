@@ -1,0 +1,82 @@
+[package]
+name = "taktdock"
+version = "1.0.0"
+description = "Metronome that floats above the taskbar or pins into it"
+authors = ["TaktDock contributors"]
+license = "GPL-3.0-or-later"
+repository = "https://github.com/kalaylienes/taktdock"
+edition = "2021"
+rust-version = "1.85"
+
+[lib]
+name = "taktdock_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-autostart = "2"
+# Linux only knows how to replace an AppImage, so the menu entries that drive
+# this are hidden elsewhere. The plugin itself builds on both.
+tauri-plugin-updater = "2"
+
+# The click is rendered here rather than in the webview. The webview is hidden
+# whenever a fullscreen app is in front, and a hidden page gets its timers
+# throttled; the sound must not care whether anything is on screen.
+cpal = "0.18"
+
+tokio = { version = "1", features = ["sync", "time", "rt", "rt-multi-thread", "macros"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+anyhow = "1"
+parking_lot = "0.12"
+dirs = "6"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+
+# Theme files are watched on Linux. Windows asks the registry to signal a
+# change instead, so it has nothing to watch.
+[target.'cfg(not(windows))'.dependencies]
+notify = "8"
+notify-debouncer-full = "0.5"
+
+# Fullscreen detection on Linux speaks the X11 protocol directly rather than
+# linking Xlib, so there is no C library to find at build time and none to
+# depend on at run time.
+[target.'cfg(target_os = "linux")'.dependencies]
+x11rb = "0.13"
+
+[target.'cfg(windows)'.dependencies]
+# MMCSS for the render thread. On Linux the same feature is a no-op without a
+# D-Bus build dependency, so it is only asked for here.
+cpal = { version = "0.18", features = ["realtime"] }
+windows = { version = "0.62", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_Devices_Display",
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_UI_Shell",
+  "Win32_UI_HiDpi",
+  "Win32_System_Power",
+  "Win32_System_Threading",
+  "Win32_System_ProcessStatus",
+  "Win32_Security",
+  "Win32_System_Registry",
+  "Win32_System_LibraryLoader",
+] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

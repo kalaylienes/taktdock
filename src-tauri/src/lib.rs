@@ -1,0 +1,504 @@
+//! TaktDock, a metronome that lives on the taskbar.
+
+pub mod audio;
+pub mod autostart;
+pub mod control;
+pub mod diagnostics;
+#[cfg(not(windows))]
+pub mod fullscreen_x11;
+pub mod monitor;
+pub mod settings;
+pub mod shell;
+pub mod state;
+pub mod theme;
+pub mod tray;
+pub mod update;
+pub mod window;
+
+use std::sync::Arc;
+
+use tauri::{AppHandle, Emitter, Manager};
+
+use crate::audio::{Engine, Notice};
+use crate::settings::SettingsStore;
+use crate::state::{AppState, AppearanceConfig, Transport};
+
+#[tauri::command]
+fn get_appearance(state: tauri::State<'_, Arc<AppState>>) -> AppearanceConfig {
+    state.appearance()
+}
+
+#[tauri::command]
+fn get_transport(state: tauri::State<'_, Arc<AppState>>) -> Transport {
+    state.transport()
+}
+
+/// The interface reports how tall its content actually is, and the floating
+/// window is sized to that. The expanded layout needs nearly twice the height
+/// of the plain one, and a fixed size would leave one of them padded with dead
+/// space.
+#[tauri::command]
+fn set_content_height(app: AppHandle, height: f64) {
+    window::set_content_height(&app, height);
+}
+
+#[tauri::command]
+fn show_context_menu(app: AppHandle, window: tauri::WebviewWindow) {
+    popup(&app, &window, tray::build_popup_menu(&app));
+}
+
+/// The short menu behind a right click on the meter or subdivision pill.
+#[tauri::command]
+fn show_pill_menu(app: AppHandle, window: tauri::WebviewWindow, pill: String) {
+    popup(&app, &window, tray::build_pill_menu(&app, &pill));
+}
+
+fn popup(
+    app: &AppHandle,
+    window: &tauri::WebviewWindow,
+    menu: tauri::Result<tauri::menu::Menu<tauri::Wry>>,
+) {
+    // Built here rather than borrowed from the tray. Showing a menu and
+    // swapping the tray's menu each take a mutable borrow of the object they
+    // are given, and on Linux the popup returns while the menu is still on
+    // screen, so sharing one object between them left a window in which a
+    // rebuild aborted the process. See tray::MenuHandle.
+    let Ok(menu) = menu else {
+        return;
+    };
+    window::foreground_for_menu(window);
+    // The menu has to outlive this call for the same reason, so it is parked
+    // where it stays alive until the next popup replaces it.
+    app.state::<tray::MenuHandle>()
+        .popup
+        .write()
+        .replace(menu.clone());
+    // On Windows the popup runs a modal loop that keeps pumping queued work,
+    // and a rebuild landing in the middle of it is still worth deferring.
+    let guard = tray::PopupGuard::new();
+    let _ = window.popup_menu(&menu);
+    drop(guard);
+    tray::flush_pending_rebuild(app);
+}
+
+#[tauri::command]
+fn toggle_play(app: AppHandle) -> bool {
+    control::toggle(&app)
+}
+
+#[tauri::command]
+fn set_tempo(app: AppHandle, bpm: u32) {
+    control::set_tempo(&app, bpm);
+}
+
+/// Relative, so a burst of wheel notches cannot race a read of the tempo on
+/// the interface side and lose steps.
+#[tauri::command]
+fn nudge_tempo(app: AppHandle, delta: i32) {
+    control::nudge_tempo(&app, delta);
+}
+
+#[tauri::command]
+fn cycle_meter(app: AppHandle) {
+    control::cycle_meter(&app);
+}
+
+#[tauri::command]
+fn cycle_subdivision(app: AppHandle) {
+    control::cycle_subdivision(&app);
+}
+
+#[tauri::command]
+fn cycle_sound(app: AppHandle) {
+    control::cycle_sound(&app);
+}
+
+#[tauri::command]
+fn nudge_volume(app: AppHandle, delta: i32) {
+    control::nudge_volume(&app, delta);
+}
+
+/// Records where a panic happened before the process goes away.
+///
+/// The release profile aborts on panic and the app runs without a console, so
+/// without this a crash leaves nothing behind but a Windows fault code.
+fn install_panic_hook() {
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let location = info
+            .location()
+            .map(|l| format!("{}:{}", l.file(), l.line()))
+            .unwrap_or_else(|| "unknown location".into());
+
+        let message = info
+            .payload()
+            .downcast_ref::<&str>()
+            .map(|s| (*s).to_string())
+            .or_else(|| info.payload().downcast_ref::<String>().cloned())
+            .unwrap_or_else(|| "no message".into());
+
+        // The audio path runs on threads of its own, and "it crashed" is a
+        // very different report when the thread was the render callback.
+        let thread = std::thread::current()
+            .name()
+            .unwrap_or("unnamed")
+            .to_string();
+
+        // A panic while the session is being torn down is not a fault worth a
+        // crash report: the shell has already destroyed the window and the
+        // process was going away regardless. Filing it would bury the reports
+        // that do mean something.
+        if session_ending() {
+            tracing::warn!(
+                "panic while the session was closing, on {thread} at {location}: {message}"
+            );
+            previous(info);
+            return;
+        }
+
+        tracing::error!("panic on {thread} at {location}: {message}");
+
+        // Written separately because the tracing appender may not flush before
+        // the process aborts.
+        let path = settings::data_dir().join("last-crash.txt");
+        let _ = std::fs::create_dir_all(settings::data_dir());
+        let _ = std::fs::write(
+            path,
+            format!(
+                "{}\nTaktDock {} on {}\nup {}s\nthread {thread}\npanic at {location}\n{message}\n\nlast log lines\n{}\n",
+                chrono::Utc::now().to_rfc3339(),
+                env!("CARGO_PKG_VERSION"),
+                desktop(),
+                uptime_secs(),
+                diagnostics::last_log_lines(40),
+            ),
+        );
+
+        previous(info);
+    }));
+}
+
+/// When this process started, for the crash report.
+static STARTED_AT: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+
+pub fn uptime_secs() -> u64 {
+    STARTED_AT
+        .get()
+        .map(|t| t.elapsed().as_secs())
+        .unwrap_or_default()
+}
+
+/// Enough of the environment to tell two crash reports apart.
+#[cfg(windows)]
+pub fn desktop() -> String {
+    "windows".into()
+}
+
+#[cfg(not(windows))]
+pub fn desktop() -> String {
+    let session = std::env::var("XDG_SESSION_TYPE").unwrap_or_else(|_| "?".into());
+    let de = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_else(|_| "?".into());
+    format!("{} ({session}, {de})", std::env::consts::OS)
+}
+
+/// Marks a launch by the watchdog task rather than by a person.
+const WATCHDOG_FLAG: &str = "--watchdog";
+
+/// Followed by the process id to wait for. Used by the restart menu item.
+const RELAUNCH_FLAG: &str = "--relaunch-after";
+
+/// Writes the diagnostic report. Handed to the running copy when there is one.
+const DIAGNOSE_FLAG: &str = "--diagnose";
+
+/// Starts or stops the running copy. For a key bound in some other program,
+/// a Stream Deck button, or a script, until there is a global shortcut.
+const TOGGLE_FLAG: &str = "--toggle";
+
+/// Checks for a new version now and installs it if there is one, the same
+/// signed path the menu item takes. For scripts, and for the updater test.
+const UPDATE_FLAG: &str = "--update";
+
+fn launched_by_watchdog() -> bool {
+    std::env::args().any(|a| a == WATCHDOG_FLAG)
+}
+
+/// The process this launch is supposed to outlive, if it is a restart helper.
+fn relaunch_target() -> Option<u32> {
+    let mut args = std::env::args();
+    while let Some(arg) = args.next() {
+        if arg == RELAUNCH_FLAG {
+            return args.next().and_then(|v| v.parse().ok());
+        }
+    }
+    None
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    // The watchdog runs this executable itself rather than going through a shell,
+    // because a scheduled task that starts a console program flashes a window
+    // over whatever is in front, once a minute, forever. That means the "stay
+    // closed" marker has to be honoured here: reaching this point at all means
+    // no instance was running, so this launch would undo a deliberate quit.
+    if launched_by_watchdog() && settings::stay_closed_marker().exists() {
+        return;
+    }
+
+    // Restart helper. Nothing of the app is built in this mode: it waits for the
+    // process that asked for the restart, starts a fresh one and returns.
+    if let Some(pid) = relaunch_target() {
+        shell::relaunch_after(pid, std::time::Duration::from_secs(20));
+        return;
+    }
+
+    let _ = STARTED_AT.set(std::time::Instant::now());
+    init_logging();
+    install_panic_hook();
+    tracing::info!(
+        "TaktDock {} starting, data in {}",
+        env!("CARGO_PKG_VERSION"),
+        settings::data_dir().display()
+    );
+
+    let mut builder = tauri::Builder::default();
+
+    // Single instance has to register first so a second launch reaches the
+    // running process and brings the widget back.
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            if argv.iter().any(|a| a == DIAGNOSE_FLAG) {
+                diagnostics::save_report(app, false);
+                return;
+            }
+            if argv.iter().any(|a| a == TOGGLE_FLAG) {
+                control::toggle(app);
+                return;
+            }
+            if argv.iter().any(|a| a == UPDATE_FLAG) {
+                let h = app.clone();
+                tauri::async_runtime::spawn(async move { update::check_and_install(&h).await });
+                return;
+            }
+            // A watchdog check is not a request to see the widget. Unhiding it
+            // every minute would override the user, and showing anything over a
+            // fullscreen game costs the game its mode.
+            if argv.iter().any(|a| a == WATCHDOG_FLAG) {
+                return;
+            }
+            window::show_by_request(app);
+        }));
+        builder = builder.plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec!["--autostarted"]),
+        ));
+    }
+
+    builder
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .invoke_handler(tauri::generate_handler![
+            get_appearance,
+            get_transport,
+            set_content_height,
+            show_context_menu,
+            show_pill_menu,
+            toggle_play,
+            set_tempo,
+            nudge_tempo,
+            cycle_meter,
+            cycle_subdivision,
+            cycle_sound,
+            nudge_volume
+        ])
+        .setup(|app| {
+            let handle = app.handle().clone();
+            // The version the updater compares against, which comes from the
+            // bundle's configuration rather than from Cargo.
+            let info = app.package_info();
+            tracing::info!("bundle {} {}", info.name, info.version);
+
+            settings::clear_stay_closed();
+
+            let store = Arc::new(SettingsStore::load());
+
+            // The last launch died applying a setting that touches the window.
+            // That one setting goes back to its default before anything reads
+            // it, and the user is told why once the widget is up.
+            let recovered = settings::take_unfinished_apply().and_then(|what| {
+                let mut note = None;
+                store.update(|s| note = settings::revert_unfinished(s, &what));
+                tracing::warn!("previous launch died applying {what}, reverted");
+                note
+            });
+
+            // The engine is built before the tray because the tray lists the
+            // devices it finds. Building it opens nothing: the device scan runs
+            // on a thread of its own and the stream only opens on play.
+            let demo = std::env::args().any(|a| a == "--demo");
+            let engine = {
+                let h = handle.clone();
+                Engine::new(
+                    &store.get().metronome,
+                    demo,
+                    Arc::new(move |notice| match notice {
+                        Notice::Beat(beat) => {
+                            let _ = h.emit("beat", beat);
+                        }
+                        Notice::Status => control::output_changed(&h),
+                    }),
+                )
+            };
+
+            let state = AppState::new(store.clone(), engine.clone());
+            app.manage(state.clone());
+
+            // Before the tray menu, which lists the displays, and before any
+            // placement. On Linux the layout can only be read from this thread,
+            // and both of those need it immediately.
+            monitor::init(&handle);
+
+            tray::setup(&handle)?;
+            autostart::sync(&handle, store.get().autostart);
+            update::watch(&handle);
+
+            window::apply_ex_styles(&handle);
+            window::reposition(&handle);
+
+            // Click through is applied by `show`. On Linux the request
+            // aborts the process against a window that has never been
+            // realised, and at this point the widget has not been shown yet.
+            let settings = store.get();
+            let force_show = std::env::args().any(|a| a == "--show");
+            if settings.widget.visible || force_show {
+                window::show(&handle);
+            }
+
+            {
+                let h = handle.clone();
+                theme::watch(move |_dark| {
+                    if let Some(state) = h.try_state::<Arc<AppState>>() {
+                        let _ = h.emit("config", state.appearance());
+                    }
+                });
+            }
+
+            window::spawn_reconciler(handle.clone());
+
+            if demo || std::env::args().any(|a| a == TOGGLE_FLAG) {
+                engine.start();
+                control::output_changed(&handle);
+            }
+
+            if let Some(note) = recovered {
+                std::thread::spawn(move || diagnostics::message_box("TaktDock", note));
+            }
+
+            if std::env::args().any(|a| a == UPDATE_FLAG) {
+                let h = handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                    update::check_and_install(&h).await;
+                });
+            }
+
+            if std::env::args().any(|a| a == DIAGNOSE_FLAG) {
+                // A fresh start has nothing to measure yet, so the report
+                // waits until the widget has been up for a moment.
+                let h = handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                    diagnostics::save_report(&h, false);
+                });
+            }
+
+            Ok(())
+        })
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::Moved(_) => window::on_moved(window.app_handle()),
+            tauri::WindowEvent::CloseRequested { api, .. } => {
+                // The widget hides instead of closing; the tray is the way back.
+                api.prevent_close();
+                let _ = window.hide();
+            }
+            _ => {}
+        })
+        .build(tauri::generate_context!())
+        .expect("failed to start the application")
+        .run(|app, event| match event {
+            tauri::RunEvent::ExitRequested { api, .. } => {
+                // Hiding the last window must not end the process, but a
+                // deliberate quit has to get through. Preventing this
+                // unconditionally made the Exit menu item do nothing at all.
+                //
+                // Windows signing the user out has to get through as well. The
+                // shell destroys the window first and the event loop cannot be
+                // driven past that point: keeping it alive aborts inside the
+                // toolkit with "cannot move state from Destroyed", which lands
+                // in the crash report as if something had gone wrong during an
+                // otherwise orderly shutdown.
+                let torn_down = session_ending() || window::widget(app).is_none();
+                if !state::is_quitting() && !torn_down {
+                    api.prevent_exit();
+                }
+            }
+            tauri::RunEvent::Exit => {
+                if let Some(state) = app.try_state::<Arc<AppState>>() {
+                    state.engine.shutdown();
+                }
+            }
+            _ => {}
+        });
+}
+
+/// Has the shell started tearing the session down?
+#[cfg(windows)]
+fn session_ending() -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_SHUTTINGDOWN};
+    unsafe { GetSystemMetrics(SM_SHUTTINGDOWN) != 0 }
+}
+
+#[cfg(not(windows))]
+fn session_ending() -> bool {
+    false
+}
+
+fn init_logging() {
+    use tracing_subscriber::prelude::*;
+
+    let dir = settings::data_dir().join("logs");
+    let _ = std::fs::create_dir_all(&dir);
+
+    let appender = tracing_appender::rolling::Builder::new()
+        .rotation(tracing_appender::rolling::Rotation::DAILY)
+        .filename_prefix("taktdock")
+        .filename_suffix("log")
+        .max_log_files(3)
+        .build(&dir);
+
+    let filter = tracing_subscriber::EnvFilter::try_from_env("TAKTDOCK_LOG")
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+
+    match appender {
+        Ok(writer) => {
+            // Written straight through rather than through a background worker.
+            // The worker's buffer only flushes when its guard drops, the
+            // release profile aborts on panic so nothing drops, and the lines
+            // lost were always the ones written just before a crash: exactly
+            // the ones worth having. This app writes a handful of lines a
+            // minute, so there is nothing here for a buffer to earn.
+            let _ = tracing_subscriber::registry()
+                .with(filter)
+                .with(
+                    tracing_subscriber::fmt::layer()
+                        .with_ansi(false)
+                        .with_writer(writer),
+                )
+                .try_init();
+        }
+        Err(_) => {
+            let _ = tracing_subscriber::registry()
+                .with(filter)
+                .with(tracing_subscriber::fmt::layer())
+                .try_init();
+        }
+    }
+}

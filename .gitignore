@@ -1,0 +1,15 @@
+node_modules/
+dist/
+dist-portable/
+src-tauri/target/
+src-tauri/gen/
+
+# Local captures of a running widget.
+tests/screenshots/
+test-results/
+playwright-report/
+*.log
+
+# The planning notes and the research behind them stay on this machine.
+/plan.md
+/docs/research/
