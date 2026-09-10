@@ -40,9 +40,10 @@ const RETRY_EVERY: Duration = Duration::from_secs(2);
 /// on this cadence rather than on every tick of anything.
 const SCAN_EVERY: Duration = Duration::from_secs(10);
 
-/// Clicks that can ring at once. Sixteenths at 300 bpm are 50 ms apart and the
-/// longest click is about the same, so two overlap at most; eight is room.
-const MAX_VOICES: usize = 8;
+/// Sounds that can ring at once. Sixteenths at 300 bpm are 50 ms apart; a
+/// click is gone before the next one and a meow lasts up to seven of them, so
+/// sixteen is room with some to spare.
+const MAX_VOICES: usize = 16;
 
 /// Sample rate of the silent driver.
 const SILENT_RATE: u32 = 48_000;
@@ -783,7 +784,7 @@ const IDLE: Voice = Voice {
 /// silent driver so both keep the same time.
 struct Renderer {
     clock: Clock,
-    banks: [Bank; 2],
+    banks: [Bank; Sound::ALL.len()],
     voices: [Voice; MAX_VOICES],
     seen_generation: u32,
     shared: Arc<Shared>,
@@ -793,10 +794,7 @@ impl Renderer {
     fn new(rate: u32, shared: Arc<Shared>) -> Self {
         Self {
             clock: Clock::new(rate),
-            banks: [
-                Bank::render(Sound::Click, rate),
-                Bank::render(Sound::Wood, rate),
-            ],
+            banks: Sound::ALL.map(|s| Bank::render(s, rate)),
             voices: [IDLE; MAX_VOICES],
             // Whatever start came before this stream belongs to the last one.
             seen_generation: shared.generation.load(Ordering::SeqCst).wrapping_sub(1),
@@ -855,7 +853,7 @@ impl Renderer {
                 }
                 voice.pos += 1;
             }
-            write(frame, (v * gain).clamp(-1.0, 1.0));
+            write(frame, voice::soft_limit(v * gain));
         }
     }
 }
@@ -871,7 +869,7 @@ fn start_voice(voices: &mut [Voice; MAX_VOICES], bank: u8, kind: Kind, offset: u
             .unwrap_or(0)
     });
     voices[slot] = Voice {
-        bank: bank.min(1),
+        bank: bank.min(Sound::ALL.len() as u8 - 1),
         kind,
         pos: -(offset as isize),
         active: true,
@@ -1183,14 +1181,14 @@ mod tests {
         assert!((e.at_ms - (5000.0 + 1000.0 * 1000.0 / 48_000.0)).abs() < 1e-6);
     }
 
-    /// Overlapping clicks at the fastest grid must never clip, whatever the
-    /// volume.
+    /// Overlapping sounds at the fastest grid must never clip, whatever the
+    /// volume, and a stack of meows is the hardest case there is.
     #[test]
     fn the_fastest_grid_never_clips() {
         let shared = shared(300);
         shared.subdivision.store(4, Ordering::Relaxed);
         shared.volume.store(100, Ordering::Relaxed);
-        for sound in [0u8, 1] {
+        for sound in 0..Sound::ALL.len() as u8 {
             shared.sound.store(sound, Ordering::Relaxed);
             let mut r = Renderer::new(44_100, shared.clone());
             play(&shared);
@@ -1198,8 +1196,8 @@ mod tests {
             for _ in 0..100 {
                 r.process(441, 0.0, |_, v| peak = peak.max(v.abs()));
             }
-            assert!(peak <= 1.0);
-            assert!(peak > 0.3);
+            assert!(peak < 1.0, "sound {sound} reached {peak}");
+            assert!(peak > 0.3, "sound {sound} peaked at only {peak}");
             while shared.ring.pop().is_some() {}
         }
     }

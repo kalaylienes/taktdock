@@ -24,6 +24,10 @@ pub const TEMPO_PRESETS: [u32; 7] = [60, 80, 100, 120, 140, 160, 180];
 
 pub const VOLUME_STEPS: [u8; 4] = [25, 50, 75, 100];
 
+/// The sounds by the name the file stores. The audio side has the same list in
+/// `audio::voice::Sound`, and a test keeps the two in step.
+pub const SOUNDS: [&str; 4] = ["click", "wood", "hihat", "meow"];
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MetronomeSettings {
     #[serde(default = "default_bpm")]
@@ -36,7 +40,7 @@ pub struct MetronomeSettings {
     pub subdivision: u8,
     #[serde(default = "yes")]
     pub accent_first: bool,
-    /// "click" or "wood".
+    /// "click", "wood", "hihat" or "meow".
     #[serde(default = "default_sound")]
     pub sound: String,
     /// 0 to 100. Applied on a logarithmic curve, see `audio::voice::gain`.
@@ -93,7 +97,7 @@ impl MetronomeSettings {
         if !SUBDIVISIONS.contains(&self.subdivision) {
             self.subdivision = 1;
         }
-        if self.sound != "click" && self.sound != "wood" {
+        if !SOUNDS.contains(&self.sound.as_str()) {
             self.sound = default_sound();
         }
         self.volume = self.volume.min(100);
@@ -177,6 +181,10 @@ pub struct AppearanceSettings {
     pub compact: bool,
     #[serde(default = "yes")]
     pub animations: bool,
+    /// The accent colour as `#rrggbb`, anything at all. `None` is the built in
+    /// turquoise, whose two theme variants were tuned by hand.
+    #[serde(default)]
+    pub accent: Option<String>,
 }
 
 fn default_theme() -> String {
@@ -190,8 +198,37 @@ impl Default for AppearanceSettings {
             expanded: false,
             compact: false,
             animations: true,
+            accent: None,
         }
     }
+}
+
+/// The accent the built in palette is drawn around, for the picker to start
+/// from and for the tray icon when nothing else was chosen.
+pub const DEFAULT_ACCENT: &str = "#3fbfae";
+
+/// `#rgb`, `#rrggbb`, with or without the hash, any case, surrounding space
+/// ignored. Comes back as lowercase `#rrggbb`, or `None` for anything else.
+pub fn normalise_accent(text: &str) -> Option<String> {
+    let hex = text.trim().trim_start_matches('#');
+    if !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    let full = match hex.len() {
+        3 => hex.chars().flat_map(|c| [c, c]).collect::<String>(),
+        6 => hex.to_string(),
+        _ => return None,
+    };
+    Some(format!("#{}", full.to_ascii_lowercase()))
+}
+
+/// The accent as red, green and blue, for drawing the tray icon.
+pub fn accent_rgb(accent: Option<&str>) -> [u8; 3] {
+    let hex = accent
+        .and_then(normalise_accent)
+        .unwrap_or_else(|| DEFAULT_ACCENT.to_string());
+    let byte = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).unwrap_or(0);
+    [byte(1), byte(3), byte(5)]
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -254,6 +291,7 @@ fn migrate(mut s: Settings) -> Settings {
         s.schema_version = SCHEMA_VERSION;
     }
     s.metronome = s.metronome.sanitised();
+    s.appearance.accent = s.appearance.accent.as_deref().and_then(normalise_accent);
     s
 }
 
@@ -367,6 +405,11 @@ impl SettingsStore {
             let mut guard = self.inner.write();
             f(&mut guard);
             guard.metronome = guard.metronome.clone().sanitised();
+            guard.appearance.accent = guard
+                .appearance
+                .accent
+                .as_deref()
+                .and_then(normalise_accent);
             guard.clone()
         };
         if let Err(e) = self.persist() {
@@ -466,6 +509,56 @@ mod tests {
         }
         .sanitised();
         assert_eq!(slow.bpm, MIN_BPM);
+    }
+
+    #[test]
+    fn any_colour_is_accepted_in_any_way_it_is_usually_written() {
+        assert_eq!(normalise_accent("#FF8800").as_deref(), Some("#ff8800"));
+        assert_eq!(normalise_accent("ff8800").as_deref(), Some("#ff8800"));
+        assert_eq!(normalise_accent(" #f80 ").as_deref(), Some("#ff8800"));
+        assert_eq!(normalise_accent("#000").as_deref(), Some("#000000"));
+        assert_eq!(normalise_accent("#ffffff").as_deref(), Some("#ffffff"));
+        for bad in [
+            "",
+            "#",
+            "#12",
+            "#12345",
+            "#1234567",
+            "#ggg",
+            "red",
+            "rgb(1,2,3)",
+        ] {
+            assert_eq!(normalise_accent(bad), None, "{bad}");
+        }
+        assert_eq!(accent_rgb(Some("#ff8800")), [255, 136, 0]);
+        assert_eq!(accent_rgb(None), [0x3f, 0xbf, 0xae]);
+        assert_eq!(accent_rgb(Some("nonsense")), [0x3f, 0xbf, 0xae]);
+    }
+
+    #[test]
+    fn a_hand_edited_accent_is_tidied_or_dropped() {
+        let json = r##"{"schema_version":1,"appearance":{"accent":"#ABC"}}"##;
+        assert_eq!(
+            migrate(parse(json).unwrap()).appearance.accent.as_deref(),
+            Some("#aabbcc")
+        );
+        let json = r##"{"schema_version":1,"appearance":{"accent":"teal"}}"##;
+        assert_eq!(migrate(parse(json).unwrap()).appearance.accent, None);
+    }
+
+    #[test]
+    fn the_file_and_the_audio_side_know_the_same_sounds() {
+        use crate::audio::voice::Sound;
+        let names: Vec<&str> = Sound::ALL.iter().map(|s| s.name()).collect();
+        assert_eq!(names, SOUNDS);
+        for name in SOUNDS {
+            let m = MetronomeSettings {
+                sound: name.into(),
+                ..Default::default()
+            }
+            .sanitised();
+            assert_eq!(m.sound, name);
+        }
     }
 
     #[test]

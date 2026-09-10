@@ -23,6 +23,7 @@ export async function installTauriMock(page: Page) {
         expanded: false,
         placement: "float",
         motion_allowed: true,
+        accent: null,
       },
       transport: {
         running: false,
@@ -95,6 +96,25 @@ export async function boot(page: Page, transport: Json = {}, appearance: Json = 
   await page.goto("/");
   await page.waitForSelector(".td-shell");
   await page.waitForSelector(".td-bpm");
+}
+
+/** Opens the accent picker page against the same fake backend. */
+export async function bootPicker(page: Page, appearance: Json = {}) {
+  await installTauriMock(page);
+  await page.addInitScript((a) => {
+    const apply = () => {
+      const td = (window as any).__TD;
+      if (!td) return false;
+      td.appearance = { ...td.appearance, ...(a as object) };
+      return true;
+    };
+    if (!apply()) queueMicrotask(apply);
+  }, appearance);
+  await page.goto("/?view=accent");
+  await page.waitForSelector(".td-picker");
+  await page.waitForFunction(() =>
+    (window as any).__TD.calls.some((c: { cmd: string }) => c.cmd === "get_appearance"),
+  );
 }
 
 export async function setTransport(page: Page, value: Json) {

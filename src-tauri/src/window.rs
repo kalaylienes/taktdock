@@ -111,6 +111,36 @@ pub fn widget(app: &AppHandle) -> Option<tauri::WebviewWindow> {
     app.get_webview_window(WIDGET_LABEL)
 }
 
+pub const PICKER_LABEL: &str = "accent";
+
+/// Opens the accent colour picker, or brings it forward if it is open.
+///
+/// Unlike the widget it is an ordinary window that takes focus, because it
+/// has a text field for a hex value and the widget can never take the
+/// keyboard. It lives only as long as it is open.
+pub fn open_accent_picker(app: &AppHandle) {
+    if let Some(win) = app.get_webview_window(PICKER_LABEL) {
+        let _ = win.unminimize();
+        let _ = win.show();
+        let _ = win.set_focus();
+        return;
+    }
+    let url = tauri::WebviewUrl::App("index.html?view=accent".into());
+    let built = tauri::WebviewWindowBuilder::new(app, PICKER_LABEL, url)
+        .title("TaktDock accent colour")
+        .inner_size(296.0, 372.0)
+        .resizable(false)
+        .maximizable(false)
+        .minimizable(false)
+        .always_on_top(true)
+        .center()
+        .focused(true)
+        .build();
+    if let Err(e) = built {
+        tracing::warn!("the colour picker could not be opened: {e}");
+    }
+}
+
 /// Applies a size to a window the user is not allowed to resize.
 ///
 /// GTK pins such a window to the size hints it was realised with and drops

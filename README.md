@@ -47,9 +47,11 @@ and never in the way.
   click it for the list.
 - **Subdivisions:** none, eighths, triplets and sixteenths, quieter than the
   beat so the beat stays the beat.
-- **Two clicks:** a short sine and a woodblock made of filtered noise, both
-  rendered once when the stream opens. Volume follows a logarithmic curve, so
-  every step of it is audible.
+- **Four sounds:** a short sine click, a woodblock, a hi-hat, and a kitten
+  that meows on the beat, meows longer and lower on the downbeat, and mews on
+  the clicks between. All four are synthesised, rendered once when the stream
+  opens, so there is no sample to license. Volume follows a logarithmic curve,
+  so every step of it is audible.
 - **Sample accurate.** Clicks are counted in samples on the audio thread, never
   timed by the interface. A thousand beats in, a click is still on the sample
   it would be on if every interval had been exact. A new tempo takes the next
@@ -67,6 +69,10 @@ and never in the way.
   or pinned into the taskbar left of the notification area. The monitor is
   remembered by identity, not coordinates, so unplugging a display or changing
   scaling cannot strand it off screen.
+- **Any accent colour.** The turquoise is only the default. Pick anything
+  from a colour square, type a hex value, or start from a preset; the widget
+  changes as you drag, and the tray icon follows. Text on tinted pills is
+  adjusted per theme so it stays readable whatever you choose.
 - **Follows the Windows theme** without a restart, and honours reduced motion.
 - **Updates itself** when you say so, with a signed installer.
 
@@ -129,6 +135,17 @@ Windows 11 hides new tray icons behind the overflow arrow by default. Drag it
 onto the taskbar to keep it visible. If the widget is ever lost, running the
 executable again brings it back rather than starting a second copy, and so does
 `taktdock.exe --show`.
+
+## Accent colour
+
+**Appearance → Accent colour...** in the tray menu opens the picker.
+
+![The accent colour picker, set to orange](docs/media/accent-picker.png)
+
+Dragging in the square or along the hue strip repaints the widget as you go
+and saves when you let go. A hex value is saved on Enter. **Default** goes back
+to the built in turquoise, **Cancel** (or Escape) back to the colour the window
+opened with. The colour is `appearance.accent` in the settings file.
 
 ## Audio interfaces and exclusive mode
 

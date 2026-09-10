@@ -33,6 +33,8 @@ pub struct AppearanceConfig {
     /// Visibility, fullscreen and power state, decided on the Rust side. Only
     /// the picture stops; the sound never looks at this.
     pub motion_allowed: bool,
+    /// `#rrggbb`, or `None` for the built in turquoise.
+    pub accent: Option<String>,
 }
 
 /// What the metronome is doing, sent to the interface as the `transport`
@@ -83,6 +85,7 @@ impl AppState {
             expanded: s.appearance.expanded,
             placement: s.widget.mode.clone(),
             motion_allowed: self.motion_allowed.load(Ordering::Relaxed),
+            accent: s.appearance.accent,
         }
     }
 

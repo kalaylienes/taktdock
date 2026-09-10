@@ -3,6 +3,7 @@ import { test, type Browser } from "@playwright/test";
 import {
   beat,
   boot,
+  bootPicker,
   expectTransparentShot,
   opaqueSurface,
   requestedHeight,
@@ -121,4 +122,20 @@ test("pinned to the taskbar", async ({ browser }) => {
 
 test("pinned, compact", async ({ browser }) => {
   await pinned(browser, "taskbar-compact.png", COMPACT, { resolved_theme: "dark", compact: true });
+});
+
+test("the accent colour picker", async ({ browser }) => {
+  const context = await browser.newContext({
+    viewport: { width: 296, height: 372 },
+    deviceScaleFactor: 2,
+  });
+  const page = await context.newPage();
+  await bootPicker(page, { resolved_theme: "dark", accent: "#f28c38" });
+  await test.expect(page.locator(".td-hex")).toHaveValue("#f28c38");
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  });
+  await page.screenshot({ path: `${OUT}/accent-picker.png`, omitBackground: true });
+  await context.close();
 });

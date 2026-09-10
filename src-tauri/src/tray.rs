@@ -1,6 +1,6 @@
 //! Tray icon and the menus.
 
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use parking_lot::RwLock;
@@ -351,10 +351,16 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     }
     let sub = sub.build()?;
 
-    let mut sound = SubmenuBuilder::new(app, "Sound")
-        .item(&radio(app, "sound:click", "Click", m.sound == "click")?)
-        .item(&radio(app, "sound:wood", "Wood", m.sound == "wood")?)
-        .separator();
+    let mut sound = SubmenuBuilder::new(app, "Sound");
+    for s in crate::audio::voice::Sound::ALL {
+        sound = sound.item(&radio(
+            app,
+            format!("sound:{}", s.name()),
+            s.label(),
+            m.sound == s.name(),
+        )?);
+    }
+    let mut sound = sound.separator();
     for v in VOLUME_STEPS {
         sound = sound.item(&radio(
             app,
@@ -452,6 +458,8 @@ fn build_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         appearance = appearance.item(&radio(app, id, label, s.appearance.theme == key)?);
     }
     let appearance = appearance
+        .separator()
+        .item(&MenuItemBuilder::with_id("accent_picker", "Accent colour...").build(app)?)
         .separator()
         .item(&radio(app, "expanded", "Expanded", s.appearance.expanded)?)
         .item(&radio(app, "compact", "Compact", s.appearance.compact)?)
@@ -617,6 +625,10 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
             return;
         }
         "show_widget" => window::toggle_visibility(app),
+        "accent_picker" => {
+            window::open_accent_picker(app);
+            needs_rebuild = false;
+        }
         "animations" => {
             state
                 .settings
@@ -761,8 +773,20 @@ fn settings_applied_later() {
     });
 }
 
-/// Which icon is up, so it is only swapped when it changes.
-static LAST_ICON: AtomicU8 = AtomicU8::new(u8::MAX);
+/// Which icon is up, as playing and colour, so it is only swapped when it
+/// changes.
+static LAST_ICON: parking_lot::Mutex<Option<(bool, [u8; 3])>> = parking_lot::Mutex::new(None);
+
+/// The playing icon in the accent colour. The shape keeps its own alpha, so
+/// the antialiased edges stay soft whatever colour goes into them.
+fn tinted(bytes: &[u8], rgb: [u8; 3]) -> tauri::Result<Image<'static>> {
+    let base = Image::from_bytes(bytes)?;
+    let mut rgba = base.rgba().to_vec();
+    for px in rgba.chunks_exact_mut(4) {
+        px[..3].copy_from_slice(&rgb);
+    }
+    Ok(Image::new_owned(rgba, base.width(), base.height()))
+}
 
 /// Grey when stopped, the accent colour while playing, and a tooltip with the
 /// tempo, the meter and whatever is wrong with the output.
@@ -774,10 +798,16 @@ pub fn refresh_badge(app: &AppHandle) {
         return;
     };
     let running = state.engine.is_running();
-    let kind = running as u8;
-    if LAST_ICON.swap(kind, Ordering::Relaxed) != kind {
-        let bytes = if running { ICON_PLAYING } else { ICON_IDLE };
-        if let Ok(icon) = Image::from_bytes(bytes) {
+    let rgb = settings::accent_rgb(state.settings.get().appearance.accent.as_deref());
+    let key = (running, rgb);
+    let changed = LAST_ICON.lock().replace(key) != Some(key);
+    if changed {
+        let icon = if running {
+            tinted(ICON_PLAYING, rgb)
+        } else {
+            Image::from_bytes(ICON_IDLE)
+        };
+        if let Ok(icon) = icon {
             let _ = tray.set_icon(Some(icon));
         }
     }

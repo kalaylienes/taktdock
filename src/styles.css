@@ -25,6 +25,10 @@ html[data-theme="dark"] {
   --danger: #ef5350;
 
   --track-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35), inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+
+  /* The picker window is an ordinary opaque window. */
+  --page: #1f1f1f;
+  --field: #ffffff0f;
 }
 
 html[data-theme="light"] {
@@ -43,6 +47,9 @@ html[data-theme="light"] {
   --danger: #c62828;
 
   --track-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.09), inset 0 -1px 0 rgba(255, 255, 255, 0.7);
+
+  --page: #f7f7f5;
+  --field: #0000000a;
 }
 
 html,
@@ -430,4 +437,190 @@ body {
 .td-shell.td-compact .td-value {
   flex: 1 1 auto;
   width: auto;
+}
+
+/* The accent colour picker. Its own window, opaque, and the only place in the
+   app that takes the keyboard. */
+
+html.td-picker-page,
+html.td-picker-page body,
+html.td-picker-page #root {
+  background: var(--page);
+}
+
+.td-picker {
+  box-sizing: border-box;
+  height: 100vh;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.td-picker-title {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.td-sv {
+  position: relative;
+  height: 150px;
+  border-radius: 6px;
+  background-image:
+    linear-gradient(to top, #000, transparent),
+    linear-gradient(to right, #fff, transparent);
+  box-shadow: inset 0 0 0 1px var(--border);
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.td-hue {
+  position: relative;
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(
+    to right,
+    #f00 0%,
+    #ff0 16.67%,
+    #0f0 33.33%,
+    #0ff 50%,
+    #00f 66.67%,
+    #f0f 83.33%,
+    #f00 100%
+  );
+  box-shadow: inset 0 0 0 1px var(--border);
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.td-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.45),
+    0 1px 3px rgba(0, 0, 0, 0.4);
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.td-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.td-picker-swatch {
+  flex: 0 0 22px;
+  height: 22px;
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.td-hex {
+  flex: 0 0 86px;
+  height: 22px;
+  box-sizing: border-box;
+  padding: 0 6px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--field);
+  color: var(--text-primary);
+  font: 500 11px "Cascadia Mono", Consolas, ui-monospace, monospace;
+  outline: none;
+}
+.td-hex:focus {
+  border-color: var(--takt-to);
+}
+.td-hex-invalid,
+.td-hex-invalid:focus {
+  border-color: var(--danger);
+}
+
+.td-picker-link {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.td-picker-link:disabled {
+  color: var(--text-secondary);
+  text-decoration: none;
+  cursor: default;
+}
+
+.td-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.td-preset {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 50%;
+  border: 0;
+  box-shadow: inset 0 0 0 1px var(--border);
+  cursor: pointer;
+}
+.td-preset-on {
+  box-shadow:
+    0 0 0 2px var(--page),
+    0 0 0 3px var(--text-primary);
+}
+
+.td-picker-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.td-picker-preview .td-pill {
+  flex: 0 0 25px;
+}
+.td-picker-bar {
+  position: relative;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+}
+
+.td-picker-actions {
+  margin-top: auto;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.td-button {
+  height: 24px;
+  padding: 0 12px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--field);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.td-button-main {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--takt-to) 18%, transparent);
+  color: var(--takt-ink);
 }

@@ -130,9 +130,20 @@ pub fn nudge_volume(app: &AppHandle, delta: i32) {
 }
 
 pub fn cycle_sound(app: &AppHandle) {
+    use crate::audio::voice::Sound;
     update(app, |m| {
-        m.sound = if m.sound == "click" { "wood" } else { "click" }.into();
+        m.sound = Sound::from_name(&m.sound).next().name().into()
     });
+}
+
+/// Stores an accent colour and repaints everything that shows it: the widget
+/// through the `config` event, the tray icon while it is lit.
+pub fn set_accent(app: &AppHandle, color: Option<String>) {
+    let Some(state) = state(app) else { return };
+    let color = color.as_deref().and_then(settings::normalise_accent);
+    state.settings.update(|s| s.appearance.accent = color);
+    let _ = app.emit("config", state.appearance());
+    crate::tray::refresh_badge(app);
 }
 
 /// How a subdivision is named in menus and tooltips.

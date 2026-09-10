@@ -108,6 +108,21 @@ fn cycle_subdivision(app: AppHandle) {
     control::cycle_subdivision(&app);
 }
 
+/// A colour while the picker is being dragged: shown on the widget at once and
+/// written nowhere, so dragging across the whole square is not a hundred
+/// writes of the settings file.
+#[tauri::command]
+fn preview_accent(app: AppHandle, color: Option<String>) {
+    let color = color.as_deref().and_then(settings::normalise_accent);
+    let _ = app.emit("accent-preview", color);
+}
+
+/// A colour the user settled on. `None` goes back to the built in turquoise.
+#[tauri::command]
+fn set_accent(app: AppHandle, color: Option<String>) {
+    control::set_accent(&app, color);
+}
+
 #[tauri::command]
 fn cycle_sound(app: AppHandle) {
     control::cycle_sound(&app);
@@ -307,7 +322,9 @@ pub fn run() {
             cycle_meter,
             cycle_subdivision,
             cycle_sound,
-            nudge_volume
+            nudge_volume,
+            preview_accent,
+            set_accent
         ])
         .setup(|app| {
             let handle = app.handle().clone();
@@ -412,14 +429,22 @@ pub fn run() {
 
             Ok(())
         })
-        .on_window_event(|window, event| match event {
-            tauri::WindowEvent::Moved(_) => window::on_moved(window.app_handle()),
-            tauri::WindowEvent::CloseRequested { api, .. } => {
-                // The widget hides instead of closing; the tray is the way back.
-                api.prevent_close();
-                let _ = window.hide();
+        .on_window_event(|window, event| {
+            // The colour picker is an ordinary window: it moves and closes
+            // like one, and none of this is about it.
+            if window.label() != window::WIDGET_LABEL {
+                return;
             }
-            _ => {}
+            match event {
+                tauri::WindowEvent::Moved(_) => window::on_moved(window.app_handle()),
+                tauri::WindowEvent::CloseRequested { api, .. } => {
+                    // The widget hides instead of closing; the tray is the way
+                    // back.
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+                _ => {}
+            }
         })
         .build(tauri::generate_context!())
         .expect("failed to start the application")

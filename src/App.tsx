@@ -8,9 +8,10 @@ import { BeatDots, type LitBeat } from "@/components/BeatDots";
 import { Pill } from "@/components/Pill";
 import { PlayButton } from "@/components/PlayButton";
 import { TempoSlider } from "@/components/TempoSlider";
+import { applyAccent } from "@/lib/accent";
 import { TapTempo } from "@/lib/tap";
 import type { AppearanceConfig, BeatEvent, Transport } from "@/lib/types";
-import { beatMs, cn, subdivisionLabel, subdivisionName } from "@/lib/utils";
+import { beatMs, cn, soundLabel, subdivisionLabel, subdivisionName } from "@/lib/utils";
 
 const DEFAULT_APPEARANCE: AppearanceConfig = {
   theme: "system",
@@ -20,6 +21,7 @@ const DEFAULT_APPEARANCE: AppearanceConfig = {
   expanded: false,
   placement: "float",
   motion_allowed: true,
+  accent: null,
 };
 
 const DEFAULT_TRANSPORT: Transport = {
@@ -56,6 +58,9 @@ export default function App() {
   const [transport, setTransport] = React.useState<Transport>(DEFAULT_TRANSPORT);
   const [live, setLive] = React.useState<Live | null>(null);
   const [osReduced, setOsReduced] = React.useState(false);
+  // A colour the picker is showing while its handle is dragged. It lives only
+  // until the next `config`, which carries whatever was finally chosen.
+  const [previewAccent, setPreviewAccent] = React.useState<string | null | undefined>(undefined);
 
   React.useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -69,7 +74,11 @@ export default function App() {
     const unlisteners: Array<() => void> = [];
     const timers = new Set<number>();
 
-    listen<AppearanceConfig>("config", (e) => setAppearance(e.payload)).then((un) =>
+    listen<AppearanceConfig>("config", (e) => {
+      setAppearance(e.payload);
+      setPreviewAccent(undefined);
+    }).then((un) => unlisteners.push(un));
+    listen<string | null>("accent-preview", (e) => setPreviewAccent(e.payload)).then((un) =>
       unlisteners.push(un),
     );
     listen<Transport>("transport", (e) => setTransport(e.payload)).then((un) =>
@@ -123,6 +132,15 @@ export default function App() {
   React.useEffect(() => {
     document.documentElement.dataset.theme = appearance.resolved_theme;
   }, [appearance.resolved_theme]);
+
+  const accent = previewAccent === undefined ? appearance.accent : previewAccent;
+  React.useEffect(() => {
+    applyAccent(
+      document.documentElement,
+      accent ?? null,
+      appearance.resolved_theme === "light" ? "light" : "dark",
+    );
+  }, [accent, appearance.resolved_theme]);
 
   const motionOn = appearance.animations && !osReduced && appearance.motion_allowed;
 
@@ -413,10 +431,10 @@ function Expanded({
           <span
             className="td-pill"
             role="button"
-            title={`Sound: ${transport.sound}. Click to switch.`}
+            title={`Sound: ${soundLabel(transport.sound)}. Click for the next one.`}
             onClick={() => invoke("cycle_sound").catch(() => {})}
           >
-            {transport.sound}
+            {soundLabel(transport.sound)}
           </span>
         </span>
       </div>

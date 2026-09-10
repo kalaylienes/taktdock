@@ -9,6 +9,8 @@ export interface AppearanceConfig {
   placement: string;
   /** Visibility, fullscreen and power state, decided on the Rust side. */
   motion_allowed: boolean;
+  /** `#rrggbb`, or null for the built in turquoise. */
+  accent: string | null;
 }
 
 /** What the metronome is doing. Sent as the `transport` event. */

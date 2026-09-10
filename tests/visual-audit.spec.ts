@@ -42,7 +42,7 @@ test("the widest values fit their slots without clipping", async ({ page }) => {
       transport: {
         bpm: 188,
         volume: 100,
-        sound: "wood",
+        sound: "hihat",
         output_device: null,
         active_device: null,
       },

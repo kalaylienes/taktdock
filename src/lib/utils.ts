@@ -59,3 +59,8 @@ export function subdivisionName(subdivision: number): string {
       return "none";
   }
 }
+
+/** How a sound is named on the widget. The settings file keeps the plain id. */
+export function soundLabel(sound: string): string {
+  return sound === "hihat" ? "hi-hat" : sound;
+}
