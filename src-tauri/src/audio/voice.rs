@@ -1,12 +1,11 @@
 //! The click sounds, rendered once when a stream opens and only copied after.
 //!
 //! Everything that costs anything (the sine, the noise, the filters, the
-//! envelopes, reading and resampling the recordings) happens here, outside the
-//! audio callback. The callback only walks an index through a slice.
+//! envelopes) happens here, outside the audio callback. The callback only
+//! walks an index through a slice.
 //!
-//! Three of the sounds are synthesised. The meow is two real kittens and the
-//! bark two real puppies, all four recordings released under CC0; see
-//! `sounds/README.md` for where they came from.
+//! Every sound is synthesised rather than sampled, so there is no recording to
+//! license and nothing to ship but code.
 
 use super::clock::Kind;
 
@@ -32,19 +31,11 @@ pub enum Sound {
     Click,
     Wood,
     HiHat,
-    Meow,
-    Bark,
 }
 
 impl Sound {
     /// Every sound, in the order the menus list them.
-    pub const ALL: [Sound; 5] = [
-        Sound::Click,
-        Sound::Wood,
-        Sound::HiHat,
-        Sound::Meow,
-        Sound::Bark,
-    ];
+    pub const ALL: [Sound; 3] = [Sound::Click, Sound::Wood, Sound::HiHat];
 
     /// The name stored in the settings file.
     pub fn name(self) -> &'static str {
@@ -52,8 +43,6 @@ impl Sound {
             Sound::Click => "click",
             Sound::Wood => "wood",
             Sound::HiHat => "hihat",
-            Sound::Meow => "meow",
-            Sound::Bark => "bark",
         }
     }
 
@@ -63,8 +52,6 @@ impl Sound {
             Sound::Click => "Click",
             Sound::Wood => "Wood",
             Sound::HiHat => "Hi-hat",
-            Sound::Meow => "Meow",
-            Sound::Bark => "Bark",
         }
     }
 
@@ -127,34 +114,21 @@ impl Bank {
                 beat: hat(45.0, rate, BEAT_PEAK, 0x5EED_0012),
                 sub: hat(30.0, rate, BEAT_PEAK * SUB_RATIO, 0x5EED_0013),
             },
-            // The older kitten's fuller meow on the downbeat, the younger one's
-            // high mew on the beat and, quieter, between beats.
-            Sound::Meow => Self {
-                accent: recording(KITTEN_8_WEEKS, rate, BEAT_PEAK * ACCENT_RATIO),
-                beat: recording(KITTEN_3_WEEKS, rate, BEAT_PEAK),
-                sub: recording(KITTEN_3_WEEKS, rate, BEAT_PEAK * SUB_RATIO),
-            },
-            // The same arrangement for the dogs: the higher little Maltipoo on
-            // the beat, the fuller Cockapoo on the downbeat.
-            Sound::Bark => Self {
-                accent: recording(PUPPY_COCKAPOO, rate, BEAT_PEAK * ACCENT_RATIO),
-                beat: recording(PUPPY_MALTIPOO, rate, BEAT_PEAK),
-                sub: recording(PUPPY_MALTIPOO, rate, BEAT_PEAK * SUB_RATIO),
-            },
         }
     }
 }
 
 /// Bends anything above the knee towards full scale instead of clipping it.
 ///
-/// A click never gets near it. A meow does: at sixteenths and a fast tempo
-/// several of them overlap, and a hard clip there is a crackle on top of a cat.
-/// Below the knee the sample passes untouched, so the other sounds keep
-/// exactly the level they were designed at.
+/// A single click never gets near it. Overlapping tails can: an open hi-hat
+/// accent still ringing under sixteenths at a fast tempo, at full volume. A
+/// hard clip there is a crackle; this bends instead. Below the knee the
+/// sample passes untouched, so every sound keeps exactly the level it was
+/// designed at.
 pub fn soft_limit(v: f32) -> f32 {
     const KNEE: f32 = 0.8;
-    // Just under full scale, so even a pile of overlapping meows never
-    // quite gets there.
+    // Just under full scale, so however much piles up, it never quite gets
+    // there.
     const CEILING: f32 = 0.98;
     let a = v.abs();
     if a <= KNEE {
@@ -246,103 +220,6 @@ fn hat(decay_ms: f64, rate: u32, peak: f32, seed: u32) -> Vec<f32> {
         })
         .collect();
     normalise(raw, peak)
-}
-
-/// A three week old kitten. CC0, barkenov on freesound.org, sound 440697.
-const KITTEN_3_WEEKS: &[u8] = include_bytes!("../../sounds/kitten-3-weeks.wav");
-
-/// An eight week old kitten. CC0, Luke100000 on freesound.org, sound 476918.
-const KITTEN_8_WEEKS: &[u8] = include_bytes!("../../sounds/kitten-8-weeks.wav");
-
-/// A Maltipoo puppy. CC0, YUXUANZHAO on freesound.org, sound 625274.
-const PUPPY_MALTIPOO: &[u8] = include_bytes!("../../sounds/puppy-maltipoo.wav");
-
-/// A Cockapoo puppy. CC0, dtmendes on freesound.org, sound 591137.
-const PUPPY_COCKAPOO: &[u8] = include_bytes!("../../sounds/puppy-cockapoo.wav");
-
-/// A recording at the device's rate and at an exact peak.
-///
-/// The files are trimmed to start on the kitten's first breath, so the beat
-/// lands where the meow is heard to begin and not a silence before it.
-fn recording(bytes: &[u8], rate: u32, peak: f32) -> Vec<f32> {
-    match read_wav(bytes) {
-        Some((from, samples)) => normalise(resample(&samples, from, rate), peak),
-        None => vec![0.0],
-    }
-}
-
-/// Reads a 16 bit PCM WAV file into mono samples, mixing channels down.
-/// Enough for the files this crate ships and nothing more: anything else
-/// comes back as `None`.
-fn read_wav(bytes: &[u8]) -> Option<(u32, Vec<f64>)> {
-    if bytes.len() < 12 || &bytes[..4] != b"RIFF" || &bytes[8..12] != b"WAVE" {
-        return None;
-    }
-    let u16_at = |i: usize| Some(u16::from_le_bytes(bytes.get(i..i + 2)?.try_into().ok()?));
-    let u32_at = |i: usize| Some(u32::from_le_bytes(bytes.get(i..i + 4)?.try_into().ok()?));
-
-    let mut format = None;
-    let mut pos = 12;
-    while pos + 8 <= bytes.len() {
-        let id = &bytes[pos..pos + 4];
-        let size = u32_at(pos + 4)? as usize;
-        let body = pos + 8;
-        if id == b"fmt " {
-            let tag = u16_at(body)?;
-            let channels = u16_at(body + 2)?;
-            let rate = u32_at(body + 4)?;
-            let bits = u16_at(body + 14)?;
-            if tag != 1 || bits != 16 || channels == 0 {
-                return None;
-            }
-            format = Some((channels as usize, rate));
-        } else if id == b"data" {
-            let (channels, rate) = format?;
-            let data = bytes.get(body..body + size)?;
-            let samples = data
-                .chunks_exact(2 * channels)
-                .map(|frame| {
-                    frame
-                        .chunks_exact(2)
-                        .map(|b| i16::from_le_bytes([b[0], b[1]]) as f64 / 32768.0)
-                        .sum::<f64>()
-                        / channels as f64
-                })
-                .collect();
-            return Some((rate, samples));
-        }
-        // Chunks are padded to an even length.
-        pos = body + size + (size & 1);
-    }
-    None
-}
-
-/// Changes the sample rate with Catmull-Rom interpolation. A short meow does
-/// not need a polyphase filter, and cubic is clean enough that the few kHz of
-/// a kitten's voice come through untouched between 44.1, 48 and 96 kHz.
-fn resample(samples: &[f64], from: u32, to: u32) -> Vec<f64> {
-    if from == to || samples.is_empty() {
-        return samples.to_vec();
-    }
-    let ratio = from as f64 / to as f64;
-    // In integers, so a whole second stays exactly a whole second.
-    let n = (samples.len() as u64 * to as u64 / from as u64) as usize;
-    let at = |i: isize| -> f64 {
-        let i = i.clamp(0, samples.len() as isize - 1) as usize;
-        samples[i]
-    };
-    (0..n)
-        .map(|k| {
-            let x = k as f64 * ratio;
-            let i = x.floor() as isize;
-            let t = x - i as f64;
-            let (p0, p1, p2, p3) = (at(i - 1), at(i), at(i + 1), at(i + 2));
-            p1 + 0.5
-                * t
-                * (p2 - p0
-                    + t * (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3 + t * (3.0 * (p1 - p2) + p3 - p0)))
-        })
-        .collect()
 }
 
 /// Scales to an exact peak, so every sound sits at the level the constants
@@ -498,12 +375,10 @@ mod tests {
             let bank = Bank::render(sound, 48_000);
             // The clicks are short enough that sixteenths at 300 bpm (50 ms
             // apart) never stack up more than a couple deep. A hi-hat is
-            // allowed to ring a little, and a cat takes the time a cat takes.
+            // allowed to ring a little.
             let longest_ms = match sound {
                 Sound::Click | Sound::Wood => 100,
                 Sound::HiHat => 250,
-                Sound::Meow => 600,
-                Sound::Bark => 300,
             };
             for buf in [&bank.accent, &bank.beat, &bank.sub] {
                 assert!(buf[0].abs() < 0.01, "{sound:?} starts with a pop");
@@ -520,7 +395,7 @@ mod tests {
 
     #[test]
     fn the_noisy_sounds_are_the_same_on_every_launch() {
-        for sound in [Sound::Wood, Sound::HiHat, Sound::Meow, Sound::Bark] {
+        for sound in [Sound::Wood, Sound::HiHat] {
             let a = Bank::render(sound, 48_000);
             let b = Bank::render(sound, 48_000);
             assert_eq!(a.beat, b.beat, "{sound:?}");
@@ -531,7 +406,11 @@ mod tests {
     fn sounds_are_found_by_name_and_index_and_step_round() {
         assert_eq!(Sound::from_name("wood"), Sound::Wood);
         assert_eq!(Sound::from_name("hihat"), Sound::HiHat);
-        assert_eq!(Sound::from_name("meow"), Sound::Meow);
+        assert_eq!(
+            Sound::from_name("meow"),
+            Sound::Click,
+            "a sound this build no longer has"
+        );
         assert_eq!(Sound::from_name("anything"), Sound::Click);
         for s in Sound::ALL {
             assert_eq!(Sound::from_index(s.index()), s);
@@ -558,76 +437,6 @@ mod tests {
         let hat = Bank::render(Sound::HiHat, 48_000);
         let bright = crossings_per_second(&hat.beat, 48_000.0);
         assert!(bright > 5_000.0, "{bright}");
-    }
-
-    /// Both recordings are really in the binary, and come out the same length
-    /// in time at every rate a device might ask for.
-    #[test]
-    fn the_kittens_play_at_every_rate() {
-        let (rate, three) = read_wav(KITTEN_3_WEEKS).expect("the 3 week file parses");
-        assert_eq!(rate, 48_000);
-        let (_, eight) = read_wav(KITTEN_8_WEEKS).expect("the 8 week file parses");
-        assert!(
-            three.len() > 48_000 / 4,
-            "the mew is a quarter second or more"
-        );
-        assert!(
-            eight.len() > three.len(),
-            "the downbeat meow is the longer one"
-        );
-
-        for device in [44_100u32, 48_000, 96_000] {
-            let bank = Bank::render(Sound::Meow, device);
-            let seconds = bank.beat.len() as f64 / device as f64;
-            let expected = three.len() as f64 / 48_000.0;
-            assert!((seconds - expected).abs() < 0.001, "{device}: {seconds} s");
-            assert!(peak(&bank.beat) > 0.49);
-        }
-    }
-
-    #[test]
-    fn every_recording_in_the_binary_parses() {
-        for (name, bytes) in [
-            ("kitten 3 weeks", KITTEN_3_WEEKS),
-            ("kitten 8 weeks", KITTEN_8_WEEKS),
-            ("maltipoo", PUPPY_MALTIPOO),
-            ("cockapoo", PUPPY_COCKAPOO),
-        ] {
-            let (rate, samples) =
-                read_wav(bytes).unwrap_or_else(|| panic!("{name} does not parse"));
-            assert_eq!(rate, 48_000, "{name}");
-            let loud = samples.iter().fold(0.0f64, |m, v| m.max(v.abs()));
-            assert!(loud > 0.1, "{name} is nearly silent");
-            assert!(
-                samples.len() > 48_000 / 5,
-                "{name} is under a fifth of a second"
-            );
-        }
-        let bank = Bank::render(Sound::Bark, 44_100);
-        assert!(peak(&bank.accent) > peak(&bank.beat));
-    }
-
-    #[test]
-    fn resampling_keeps_a_tone_a_tone() {
-        // 1 kHz at 48 kHz, taken to 44.1 kHz, still crosses zero 2000 times a
-        // second.
-        let tone: Vec<f64> = (0..48_000)
-            .map(|i| (2.0 * std::f64::consts::PI * 1000.0 * i as f64 / 48_000.0).sin())
-            .collect();
-        let out: Vec<f32> = resample(&tone, 48_000, 44_100)
-            .iter()
-            .map(|v| *v as f32)
-            .collect();
-        assert_eq!(out.len(), 44_100);
-        let hz = crossings_per_second(&out, 44_100.0);
-        assert!((hz - 1000.0).abs() < 2.0, "{hz}");
-    }
-
-    #[test]
-    fn a_file_that_is_not_a_plain_wav_is_refused() {
-        assert!(read_wav(b"").is_none());
-        assert!(read_wav(b"RIFF\0\0\0\0WAVE").is_none());
-        assert!(read_wav(b"OggS and so on").is_none());
     }
 
     #[test]

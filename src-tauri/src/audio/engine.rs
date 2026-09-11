@@ -41,8 +41,8 @@ const RETRY_EVERY: Duration = Duration::from_secs(2);
 const SCAN_EVERY: Duration = Duration::from_secs(10);
 
 /// Sounds that can ring at once. Sixteenths at 300 bpm are 50 ms apart; a
-/// click is gone before the next one and a meow lasts up to seven of them, so
-/// sixteen is room with some to spare.
+/// click is gone before the next one and an open hi-hat lasts a few of them,
+/// so sixteen is room with plenty to spare.
 const MAX_VOICES: usize = 16;
 
 /// Sample rate of the silent driver.
@@ -1182,7 +1182,7 @@ mod tests {
     }
 
     /// Overlapping sounds at the fastest grid must never clip, whatever the
-    /// volume, and a stack of meows is the hardest case there is.
+    /// volume, and a stack of hi-hat tails is the hardest case there is.
     #[test]
     fn the_fastest_grid_never_clips() {
         let shared = shared(300);

@@ -22,10 +22,8 @@ widget is the real interface.</sub>
 
 <sub>Pinned into the taskbar strip, left of the notification area.</sub>
 
-> **Status:** version 1.0 is finished and tested, but no installer has been
-> published on the releases page yet. Until then, build it from source; the
-> steps are [below](#build-it-yourself) and take about ten minutes the first
-> time.
+**[Download the latest release](https://github.com/kalaylienes/taktdock/releases/latest)**
+or install it with one line of PowerShell, [below](#install).
 
 ## Contents
 
@@ -70,9 +68,8 @@ that and nothing more.
   one, right click it for the whole list.
 - **Subdivisions:** none, eighths, triplets and sixteenths. The clicks between
   beats play quieter, so the beat stays the beat.
-- **Five sounds:** a classic click, a woodblock, a hi-hat, a kitten meow and a
-  puppy bark. The first three are synthesised; the meow and the bark are real
-  animals from public domain recordings. [More below](#sounds).
+- **Three sounds:** a classic click, a woodblock and a hi-hat, all synthesised
+  in the app. [More below](#sounds).
 - **Sample accurate timing.** Clicks are counted in audio samples on a real
   time audio thread, never timed by the interface. A thousand beats in, a click
   is still on the exact sample it should be on. A new tempo takes effect on the
@@ -134,8 +131,7 @@ if it is missing.
 
 ### From the releases page
 
-Once the first release is published, the fastest way is one line in
-PowerShell:
+The fastest way is one line in PowerShell:
 
 ```powershell
 irm https://raw.githubusercontent.com/kalaylienes/taktdock/main/scripts/install.ps1 | iex
@@ -246,7 +242,7 @@ output.
 | Tempo | Presets: 60, 80, 100, 120, 140, 160, 180 BPM |
 | Meter | Time signature, and whether the first beat is accented |
 | Subdivision | None, eighths, triplets, sixteenths |
-| Sound | Click, Wood, Hi-hat, Meow, Bark, and the volume |
+| Sound | Click, Wood, Hi-hat, and the volume |
 | Output device | System default or any output; a problem with it is shown here |
 | Show widget | Hide it and keep it playing, or bring it back |
 | Placement | Floating, or pinned to the taskbar |
@@ -278,16 +274,13 @@ output.
 | **Click** | 1500 Hz sine, 30 ms | 1000 Hz sine, 20 ms | the beat click, quieter |
 | **Wood** | filtered noise around 3 kHz | around 2 kHz | the beat, quieter |
 | **Hi-hat** | slightly open, 120 ms | closed, 45 ms | a short tick |
-| **Meow** | an eight week old kitten | a three week old kitten | the young one, quieter |
-| **Bark** | a Cockapoo puppy | a Maltipoo puppy | the Maltipoo, quieter |
 
 The accent on the downbeat is 3 dB louder than the beat, and clicks between
 beats sit at 60 percent. Volume goes from 0 to 100 on a logarithmic curve
 spanning 40 dB, so every step is audible: 50 is 25 dB below full, quiet but
-clearly there, instead of a slider whose lower half does nothing. The meows and barks are cut to start on the animal's first breath,
-so the beat lands where you hear it begin. Where every recording came from is
-in [src-tauri/sounds/README.md](src-tauri/sounds/README.md); all of them are
-released under CC0.
+clearly there, instead of a slider whose lower half does nothing. Every sound
+is synthesised when the stream opens, so there is no sample library to
+download and nothing to license.
 
 ## Accent colour
 
@@ -360,7 +353,7 @@ fine, and anything out of range is brought back into range.
 | `metronome.bpm` | Tempo, 30 to 300 |
 | `metronome.beats_per_bar`, `beat_unit` | Time signature |
 | `metronome.subdivision` | 1, 2, 3 or 4 clicks per beat |
-| `metronome.sound` | `click`, `wood`, `hihat`, `meow` or `bark` |
+| `metronome.sound` | `click`, `wood` or `hihat` |
 | `metronome.volume` | 0 to 100 |
 | `metronome.output_device` | Output by name, `null` for the system default |
 | `appearance.accent` | `#rrggbb`, or `null` for the default turquoise |
@@ -474,7 +467,6 @@ src-tauri/src/
   monitor.rs            monitor identity and taskbar geometry
   window.rs             placement, visibility, fullscreen, motion permission
   tray.rs               tray icon and menus
-src-tauri/sounds/       the four animal recordings and where they came from
 ```
 
 The sound is made in Rust rather than with Web Audio in the webview, for three
@@ -515,9 +507,6 @@ musicians find it.
 
 ## Credits
 
-- The kitten and puppy recordings are public domain (CC0) from freesound.org:
-  barkenov, Luke100000, YUXUANZHAO and dtmendes. Details in
-  [src-tauri/sounds/README.md](src-tauri/sounds/README.md).
 - The window placement, fullscreen detection and tray skeleton come from
   [FluxDock](https://github.com/kalaylienes/fluxdock), a usage widget by the same
   author.

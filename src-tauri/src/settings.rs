@@ -26,7 +26,7 @@ pub const VOLUME_STEPS: [u8; 4] = [25, 50, 75, 100];
 
 /// The sounds by the name the file stores. The audio side has the same list in
 /// `audio::voice::Sound`, and a test keeps the two in step.
-pub const SOUNDS: [&str; 5] = ["click", "wood", "hihat", "meow", "bark"];
+pub const SOUNDS: [&str; 3] = ["click", "wood", "hihat"];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MetronomeSettings {
@@ -40,7 +40,8 @@ pub struct MetronomeSettings {
     pub subdivision: u8,
     #[serde(default = "yes")]
     pub accent_first: bool,
-    /// "click", "wood", "hihat", "meow" or "bark".
+    /// "click", "wood" or "hihat". Anything else, including the meow and the
+    /// bark an earlier build had, reads back as the click.
     #[serde(default = "default_sound")]
     pub sound: String,
     /// 0 to 100. Applied on a logarithmic curve, see `audio::voice::gain`.
