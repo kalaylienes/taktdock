@@ -30,7 +30,9 @@ signed with the real key, and a local server playing the part of GitHub.
    flag exists only in these overlays and must never reach a real build.
 
 2. Build both with the signing key in the environment
-   (`TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`):
+   (`TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`). The
+   overlays need `"bundle": { "createUpdaterArtifacts": true }` as well, since
+   the manifest leaves update packages off for ordinary builds:
 
    ```powershell
    npx tauri build --config old.json

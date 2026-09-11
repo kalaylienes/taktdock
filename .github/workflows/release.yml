@@ -65,11 +65,13 @@ jobs:
 
       # Signing is what lets an installed copy trust the installer it downloads,
       # so a build without the key would produce a release nobody can update to.
+      # The manifest leaves the update artefacts off, so anyone can build the
+      # app without the key; a release turns them on here.
       - name: Build the bundle
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: npm run tauri build
+        run: npm run tauri build -- --config src-tauri/release.conf.json
 
       - name: Package the portable build
         shell: pwsh

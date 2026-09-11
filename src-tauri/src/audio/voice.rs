@@ -4,9 +4,9 @@
 //! envelopes, reading and resampling the recordings) happens here, outside the
 //! audio callback. The callback only walks an index through a slice.
 //!
-//! Three of the sounds are synthesised. The meow is two real kittens, both
-//! recordings released under CC0; see `sounds/README.md` for where they came
-//! from.
+//! Three of the sounds are synthesised. The meow is two real kittens and the
+//! bark two real puppies, all four recordings released under CC0; see
+//! `sounds/README.md` for where they came from.
 
 use super::clock::Kind;
 
@@ -33,11 +33,18 @@ pub enum Sound {
     Wood,
     HiHat,
     Meow,
+    Bark,
 }
 
 impl Sound {
     /// Every sound, in the order the menus list them.
-    pub const ALL: [Sound; 4] = [Sound::Click, Sound::Wood, Sound::HiHat, Sound::Meow];
+    pub const ALL: [Sound; 5] = [
+        Sound::Click,
+        Sound::Wood,
+        Sound::HiHat,
+        Sound::Meow,
+        Sound::Bark,
+    ];
 
     /// The name stored in the settings file.
     pub fn name(self) -> &'static str {
@@ -46,6 +53,7 @@ impl Sound {
             Sound::Wood => "wood",
             Sound::HiHat => "hihat",
             Sound::Meow => "meow",
+            Sound::Bark => "bark",
         }
     }
 
@@ -56,6 +64,7 @@ impl Sound {
             Sound::Wood => "Wood",
             Sound::HiHat => "Hi-hat",
             Sound::Meow => "Meow",
+            Sound::Bark => "Bark",
         }
     }
 
@@ -124,6 +133,13 @@ impl Bank {
                 accent: recording(KITTEN_8_WEEKS, rate, BEAT_PEAK * ACCENT_RATIO),
                 beat: recording(KITTEN_3_WEEKS, rate, BEAT_PEAK),
                 sub: recording(KITTEN_3_WEEKS, rate, BEAT_PEAK * SUB_RATIO),
+            },
+            // The same arrangement for the dogs: the higher little Maltipoo on
+            // the beat, the fuller Cockapoo on the downbeat.
+            Sound::Bark => Self {
+                accent: recording(PUPPY_COCKAPOO, rate, BEAT_PEAK * ACCENT_RATIO),
+                beat: recording(PUPPY_MALTIPOO, rate, BEAT_PEAK),
+                sub: recording(PUPPY_MALTIPOO, rate, BEAT_PEAK * SUB_RATIO),
             },
         }
     }
@@ -237,6 +253,12 @@ const KITTEN_3_WEEKS: &[u8] = include_bytes!("../../sounds/kitten-3-weeks.wav");
 
 /// An eight week old kitten. CC0, Luke100000 on freesound.org, sound 476918.
 const KITTEN_8_WEEKS: &[u8] = include_bytes!("../../sounds/kitten-8-weeks.wav");
+
+/// A Maltipoo puppy. CC0, YUXUANZHAO on freesound.org, sound 625274.
+const PUPPY_MALTIPOO: &[u8] = include_bytes!("../../sounds/puppy-maltipoo.wav");
+
+/// A Cockapoo puppy. CC0, dtmendes on freesound.org, sound 591137.
+const PUPPY_COCKAPOO: &[u8] = include_bytes!("../../sounds/puppy-cockapoo.wav");
 
 /// A recording at the device's rate and at an exact peak.
 ///
@@ -481,6 +503,7 @@ mod tests {
                 Sound::Click | Sound::Wood => 100,
                 Sound::HiHat => 250,
                 Sound::Meow => 600,
+                Sound::Bark => 300,
             };
             for buf in [&bank.accent, &bank.beat, &bank.sub] {
                 assert!(buf[0].abs() < 0.01, "{sound:?} starts with a pop");
@@ -497,7 +520,7 @@ mod tests {
 
     #[test]
     fn the_noisy_sounds_are_the_same_on_every_launch() {
-        for sound in [Sound::Wood, Sound::HiHat, Sound::Meow] {
+        for sound in [Sound::Wood, Sound::HiHat, Sound::Meow, Sound::Bark] {
             let a = Bank::render(sound, 48_000);
             let b = Bank::render(sound, 48_000);
             assert_eq!(a.beat, b.beat, "{sound:?}");
@@ -560,6 +583,28 @@ mod tests {
             assert!((seconds - expected).abs() < 0.001, "{device}: {seconds} s");
             assert!(peak(&bank.beat) > 0.49);
         }
+    }
+
+    #[test]
+    fn every_recording_in_the_binary_parses() {
+        for (name, bytes) in [
+            ("kitten 3 weeks", KITTEN_3_WEEKS),
+            ("kitten 8 weeks", KITTEN_8_WEEKS),
+            ("maltipoo", PUPPY_MALTIPOO),
+            ("cockapoo", PUPPY_COCKAPOO),
+        ] {
+            let (rate, samples) =
+                read_wav(bytes).unwrap_or_else(|| panic!("{name} does not parse"));
+            assert_eq!(rate, 48_000, "{name}");
+            let loud = samples.iter().fold(0.0f64, |m, v| m.max(v.abs()));
+            assert!(loud > 0.1, "{name} is nearly silent");
+            assert!(
+                samples.len() > 48_000 / 5,
+                "{name} is under a fifth of a second"
+            );
+        }
+        let bank = Bank::render(Sound::Bark, 44_100);
+        assert!(peak(&bank.accent) > peak(&bank.beat));
     }
 
     #[test]

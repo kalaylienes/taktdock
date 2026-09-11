@@ -49,10 +49,11 @@ jobs:
       - uses: actions/checkout@v5
 
       # The skeleton came from another app, and a name left behind in a string
-      # or a path is exactly the kind of thing that ships unnoticed.
+      # or a path is exactly the kind of thing that ships unnoticed. The code
+      # is checked; the README credits the skeleton on purpose.
       - name: No leftovers from the skeleton
         run: |
-          if git grep -n -i "fluxdock" -- ':!.github/workflows/ci.yml'; then
+          if git grep -n -i "fluxdock" -- src src-tauri scripts tests index.html package.json ':!src-tauri/sounds'; then
             echo "the old app's name is still in the tree" >&2
             exit 1
           fi

@@ -22,6 +22,9 @@ const EXPECTED = [
   ["docs/media/taskbar.png", 624, 132, 6],
   ["docs/media/taskbar-compact.png", 372, 132, 6],
   ["docs/media/accent-picker.png", 592, 744, 2],
+  ["docs/media/scene-floating.png", 2200, 660, 2],
+  ["docs/media/scene-pinned.png", 2200, 660, 2],
+  ["docs/media/accents.png", 600, 596, 6],
 ] as const;
 
 test("the README images are RGBA at the size the layout produces", () => {
